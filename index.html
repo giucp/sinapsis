@@ -12,7 +12,7 @@
 <!-- iOS: permite "Agregar a inicio" como app a pantalla completa -->
 <meta name="apple-mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
-<meta name="apple-mobile-web-app-title" content="SINAPSIS">
+<meta name="apple-mobile-web-app-title" content="Sinapsis">
 <link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
@@ -137,7 +137,7 @@
   .opt.tile{min-height:70px}
   .opt.ok{border-color:var(--c-fisica);background:rgba(91,228,155,.16)}
   .opt.no{border-color:#FF5468;background:rgba(255,84,104,.16)}
-  .opt.dead{opacity:.22;pointer-events:none}
+  .opt.dead{opacity:0;pointer-events:none;animation:none;transition:opacity .28s ease}
   .shape{width:42px;height:42px;display:grid;place-items:center;position:relative}
   .shape svg{position:absolute;inset:0;width:100%;height:100%}
   .shape span{position:relative;font-family:'JetBrains Mono';font-weight:700;font-size:15px;color:#0A0A1E}
@@ -196,14 +196,24 @@
   .claim-msg{font-size:11px;color:#FF5468;margin-top:6px;min-height:13px}
   .netline{text-align:center;font-family:'JetBrains Mono';font-size:10px;color:var(--faint);padding-top:8px}
   .netline.on{color:var(--c-fisica)}
-  .ios-hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:30;max-width:420px;width:calc(100% - 28px);
+  .ios-hint{position:fixed;left:14px;right:14px;bottom:16px;margin:0 auto;z-index:30;max-width:420px;
     background:rgba(22,20,47,.97);border:1px solid var(--c-figuras);border-radius:16px;padding:13px 14px;
     display:flex;align-items:center;gap:11px;box-shadow:0 18px 50px -18px #000,0 0 26px -12px var(--c-figuras);
-    animation:scrIn .4s cubic-bezier(.2,.8,.3,1) both}
+    animation:hintIn .4s cubic-bezier(.2,.8,.3,1) both}
+  @keyframes hintIn{0%{opacity:0;transform:translateY(12px)}100%{opacity:1;transform:translateY(0)}}
   .ios-hint .ico{font-size:22px;flex:0 0 auto}
   .ios-hint .tx{font-size:12px;color:var(--ink);line-height:1.4;flex:1}
   .ios-hint .tx b{color:var(--c-figuras)}
   .ios-hint .x{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:14px;cursor:pointer}
+  .veil{position:fixed;inset:0;z-index:40;background:rgba(6,6,20,.78);backdrop-filter:blur(6px);display:flex;align-items:center;justify-content:center;padding:20px}
+  .vcard{width:100%;max-width:400px;background:var(--panel);border:1px solid var(--line);border-radius:22px;padding:22px 20px;box-shadow:0 30px 80px -30px #000;animation:hintIn .35s cubic-bezier(.2,.8,.3,1) both}
+  .vcard h3{font-size:20px;margin-bottom:12px;text-align:center}
+  .vrow{display:flex;gap:11px;align-items:flex-start;padding:7px 0;font-size:13.5px;color:var(--muted);line-height:1.45}
+  .vrow .ve{font-size:20px;flex:0 0 26px;text-align:center}
+  .vrow b{color:var(--ink)}
+  .vbtns{display:flex;flex-direction:column;gap:9px;margin-top:16px}
+  .vtag{font-family:'JetBrains Mono';font-size:10px;letter-spacing:.14em;text-transform:uppercase;text-align:center;margin-bottom:8px}
+  .vrec{text-align:center;font-size:11px;color:var(--faint)}
   .ladder{display:flex;flex-direction:column;gap:9px}
   .rung{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 15px;position:relative;overflow:hidden}
   .rung .bar{position:absolute;left:0;top:0;bottom:0;width:0;opacity:.16}
@@ -336,6 +346,8 @@
   </nav>
 </div>
 
+<div class="veil" id="veil" style="display:none"><div class="vcard" id="vcard"></div></div>
+
 <div class="ios-hint" id="iosHint" style="display:none">
   <span class="ico">📲</span>
   <span class="tx" id="iosHintTx"></span>
@@ -379,7 +391,14 @@ const NEURAL_COLS=['#22D3EE','#FF4D8D','#A78BFA','#FFB627'], NEURAL_WASH='rgba(3
 })();
 
 /* ===== i18n ===== */
-let lang=(navigator.language||'es').toLowerCase().startsWith('en')?'en':'es';
+/* almacenamiento seguro: localStorage con respaldo en memoria (nunca rompe) */
+const MEM={};
+const store={
+  get(k){ try{ return localStorage.getItem(k); }catch(e){ return (k in MEM)?MEM[k]:null; } },
+  set(k,v){ try{ localStorage.setItem(k,v); }catch(e){ MEM[k]=v; } }
+};
+let lang=store.get('sx_lang') || ((navigator.language||'es').toLowerCase().startsWith('en')?'en':'es');
+if(lang!=='es'&&lang!=='en') lang='es';
 const STR={
   es:{
     diario:'Reto diario', infinito:'Infinito', jugar:'JUGAR ▸',
@@ -412,6 +431,18 @@ const STR={
     net_on:'en línea', net_off:'modo local · sin conexión', net_cfg:'backend sin configurar',
     racha_dias:'días seguidos', no_pierdas:'no la pierdas', racha_pill:'racha', compartir:'Compartir resultado',
     copiado:'¡Copiado! Pégalo donde quieras 📋', copia_manual:'Copia tu resultado:',
+    intro_t:'¿Cómo se juega?',
+    intro_1:'El reloj es tu vida: acierta <b>rápido</b> para sumar tiempo. Fallar te resta.',
+    intro_2:'Encadena aciertos y el multiplicador crece. <b>6 seguidos = Sobrecarga</b>: reloj congelado y puntos x3.',
+    intro_3:'Cada 4 aciertos ganas un <b>comodín</b>. Tócalo en la bandeja para usarlo.',
+    intro_play:'Entrenar primero ▸', intro_rec:'recomendado para tu primera vez', intro_ok:'Entendido, al menú',
+    hint_first:'Juego nuevo', listo:'¡Listo!',
+    h_suma:'Dos grupos de figuras con números adentro. Toca el lado cuya suma sea <b>mayor</b>.',
+    h_secuencia:'Los números siguen un patrón. Toca el que <b>continúa</b> la serie.',
+    h_calculo:'Una cuenta rápida. Toca el <b>resultado</b> correcto.',
+    h_memoria:'Verás 3 figuras un instante. <b>Memoriza su orden</b>: te preguntarán cuál estaba en una posición.',
+    h_patron:'Las figuras giran o cambian siguiendo un orden. Toca la que <b>sigue</b>.',
+    h_intruso:'Todas las figuras son iguales menos <b>una</b>. Tócala.',
   },
   en:{
     diario:'Daily challenge', infinito:'Endless', jugar:'PLAY ▸',
@@ -444,6 +475,18 @@ const STR={
     net_on:'online', net_off:'local mode · offline', net_cfg:'backend not configured',
     racha_dias:'day streak', no_pierdas:"don't lose it", racha_pill:'streak', compartir:'Share result',
     copiado:'Copied! Paste it anywhere 📋', copia_manual:'Copy your result:',
+    intro_t:'How to play',
+    intro_1:'The clock is your life: answer <b>fast</b> to gain time. Misses cost you.',
+    intro_2:'Chain correct answers and the multiplier grows. <b>6 in a row = Surge</b>: frozen clock and x3 points.',
+    intro_3:'Every 4 correct answers you earn a <b>power-up</b>. Tap it in the tray to use it.',
+    intro_play:'Train first ▸', intro_rec:'recommended for your first time', intro_ok:'Got it, to the menu',
+    hint_first:'New game', listo:'Got it!',
+    h_suma:'Two groups of shapes with numbers inside. Tap the side with the <b>bigger</b> total.',
+    h_secuencia:'The numbers follow a pattern. Tap the one that <b>continues</b> the series.',
+    h_calculo:'Quick math. Tap the correct <b>result</b>.',
+    h_memoria:"You'll see 3 shapes for an instant. <b>Memorize their order</b>: you'll be asked which one was in a position.",
+    h_patron:'The shapes rotate or change in order. Tap the one that comes <b>next</b>.',
+    h_intruso:'All the shapes are the same except <b>one</b>. Tap it.',
   }
 };
 function t(k){ return (STR[lang]&&STR[lang][k]!=null)?STR[lang][k]:(STR.es[k]||k); }
@@ -768,7 +811,7 @@ function applyLang(){
   buildLegend(); buildBoard(); buildLadder(); initModTest();
   refreshHome();
 }
-function toggleLang(){ lang = lang==='es'?'en':'es'; SFX.tap(); applyLang(); }
+function toggleLang(){ lang = lang==='es'?'en':'es'; store.set('sx_lang',lang); SFX.tap(); applyLang(); }
 
 /* ===== NAV ===== */
 function showScreen(id){
@@ -818,14 +861,8 @@ function refreshHome(){
 function setMode(m){ if(S.running)return; SFX.tap(); mode=m; refreshHome(); }
 
 /* ===== ENGINE ===== */
-function nextQuestion(){
-  const diff=Math.min(6,1+Math.floor(S.correctCount/4));
-  let def;
-  if(S.mod.noRepeat && S.gens.length>1){ do{ def=pick(S.gens); }while(def.type===S.lastType); }
-  else def=pick(S.gens);
-  S.lastType=def.type;
-  curQ=def.fn(diff);
-  qid++; const myId=qid;
+function renderQ(){
+  const myId=qid;
   el('qtag').textContent=curQ.label; el('qtag').style.color=curQ.color;
   el('opts').innerHTML=''; S.answerOpen=false;
   if(curQ.memorize){
@@ -833,6 +870,26 @@ function nextQuestion(){
     setTimeout(()=>{ if(!S.running||myId!==qid)return; el('stim').innerHTML=curQ.askHTML; renderOptions(); S.answerOpen=true; S.qStart=performance.now(); }, curQ.memoMs);
   }else{ el('stim').innerHTML=curQ.stim; renderOptions(); S.answerOpen=true; S.qStart=performance.now(); }
 }
+const TYPE_HINTS={suma:'h_suma',secuencia:'h_secuencia',calculo:'h_calculo',memoria:'h_memoria',patron:'h_patron',intruso:'h_intruso'};
+function nextQuestion(){
+  const diff=Math.min(6,1+Math.floor(S.correctCount/4));
+  let def;
+  if(S.mod.noRepeat && S.gens.length>1){ do{ def=pick(S.gens); }while(def.type===S.lastType); }
+  else def=pick(S.gens);
+  S.lastType=def.type;
+  curQ=def.fn(diff);
+  qid++;
+  // primera vez que el jugador ve este TIPO de juego: reloj congelado + 1 línea de cómo va
+  if(seenTypes().indexOf(def.type)<0){
+    S.hintPause=true; S.answerOpen=false;
+    el('qtag').textContent=''; el('stim').innerHTML=''; el('opts').innerHTML='';
+    showVeil('<div class="vtag" style="color:'+curQ.color+'">'+t('hint_first')+'</div>'+
+      '<h3 style="font-size:18px">'+curQ.label+'</h3>'+
+      '<div class="vrow"><span class="ve">💡</span><span>'+t(TYPE_HINTS[def.type]||'')+'</span></div>'+
+      '<div class="vbtns"><button class="btn-big" onclick="hintGo(\''+def.type+'\')">'+t('listo')+'</button></div>');
+  }else renderQ();
+}
+function hintGo(tp){ markType(tp); hideVeil(); SFX.tap(); S.hintPause=false; renderQ(); }
 function renderOptions(){
   const box=el('opts'); box.className='opts '+(curQ.layout||'grid');
   box.innerHTML=curQ.options.map((o,i)=>'<button class="opt '+(o.cls||'')+'" data-i="'+i+'" style="--i:'+i+'">'+o.html+'</button>').join('');
@@ -912,7 +969,8 @@ function syncHUD(){
 function loop(now){
   if(!S.running)return;
   const d=(now-S.last)/1000; S.last=now;
-  if(S.freeze>0){ S.freeze=Math.max(0,S.freeze-d); }
+  if(S.hintPause){ /* leyendo cómo va el juego nuevo: reloj congelado */ }
+  else if(S.freeze>0){ S.freeze=Math.max(0,S.freeze-d); }
   else if(S.surge>0){ S.surge=Math.max(0,S.surge-d); }
   else { S.time-=d*S.mod.drain; }
   if(S.time<=5&&S.time>0){ const sec=Math.ceil(S.time); if(sec!==S.lastTickSec){ S.lastTickSec=sec; SFX.tick(); } }
@@ -933,7 +991,7 @@ function startGame(){
   showScreen('scr-game');
   nextQuestion(); syncHUD(); S.raf=requestAnimationFrame(loop);
 }
-function exitGame(){ S.running=false; cancelAnimationFrame(S.raf); nav('scr-home'); }
+function exitGame(){ S.running=false; S.hintPause=false; hideVeil(); cancelAnimationFrame(S.raf); nav('scr-home'); }
 function countUp(elm,target,dur){
   const t0=performance.now();
   (function step(now){
@@ -1115,14 +1173,34 @@ function initModTest(){
   sel.onchange=()=>{ testMod=sel.value; if(!S.running) refreshHome(); };
 }
 
+/* ===== ONBOARDING (solo usuarios nuevos; recordado por dispositivo) ===== */
+function seenTypes(){ try{ return JSON.parse(store.get('sx_types')||'[]'); }catch(e){ return []; } }
+function markType(tp){ const a=seenTypes(); if(a.indexOf(tp)<0){ a.push(tp); store.set('sx_types',JSON.stringify(a)); } }
+function showVeil(html){ el('vcard').innerHTML=html; el('veil').style.display=''; }
+function hideVeil(){ el('veil').style.display='none'; }
+function showWelcome(){
+  showVeil(
+    '<h3>'+t('intro_t')+'</h3>'+
+    '<div class="vrow"><span class="ve">⏱️</span><span>'+t('intro_1')+'</span></div>'+
+    '<div class="vrow"><span class="ve">🔥</span><span>'+t('intro_2')+'</span></div>'+
+    '<div class="vrow"><span class="ve">🃏</span><span>'+t('intro_3')+'</span></div>'+
+    '<div class="vbtns">'+
+      '<button class="btn-big" onclick="introTrain()">'+t('intro_play')+'</button>'+
+      '<div class="vrec">'+t('intro_rec')+'</div>'+
+      '<button class="btn-ghost" onclick="introClose()">'+t('intro_ok')+'</button>'+
+    '</div>');
+}
+function introTrain(){ store.set('sx_intro','1'); hideVeil(); SFX.tap(); mode='infinito'; refreshHome(); startGame(); }
+function introClose(){ store.set('sx_intro','1'); hideVeil(); SFX.tap(); refreshHome(); }
+
 /* ===== AVISO "Agregar a inicio" (solo iPhone/iPad en Safari, no instalada) ===== */
-function dismissIosHint(){ const h=el('iosHint'); if(h) h.style.display='none'; try{sessionStorage.setItem('sx_ioshint','1');}catch(e){} SFX&&SFX.tap&&SFX.tap(); }
+function dismissIosHint(){ const h=el('iosHint'); if(h) h.style.display='none'; store.set('sx_ioshint','1'); SFX&&SFX.tap&&SFX.tap(); }
 function maybeShowIosHint(){
   try{
     const ua=navigator.userAgent||'';
     const isIOS=/iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
     const standalone=('standalone'in navigator&&navigator.standalone)||matchMedia('(display-mode: standalone)').matches;
-    let dismissed=false; try{dismissed=sessionStorage.getItem('sx_ioshint')==='1';}catch(e){}
+    let dismissed=(store.get('sx_ioshint')==='1');
     if(isIOS && !standalone && !dismissed){
       const h=el('iosHint'); if(!h)return;
       el('iosHintTx').innerHTML = lang==='es'
@@ -1137,6 +1215,7 @@ function maybeShowIosHint(){
 applyLang();
 initBackend();
 maybeShowIosHint();
+if(store.get('sx_intro')!=='1') showWelcome();
 </script>
 </body>
 </html>
