@@ -4,6 +4,16 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover, user-scalable=no">
 <title>SINAPSIS</title>
+<meta name="description" content="Supervivencia mental por tiempo. Lógica, reflejos y ranking diario. De ameba a extraterrestre.">
+<meta name="theme-color" content="#0A0A1E">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="icon" type="image/png" sizes="32x32" href="favicon-32.png">
+<link rel="icon" type="image/png" sizes="192x192" href="icon-192.png">
+<!-- iOS: permite "Agregar a inicio" como app a pantalla completa -->
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<meta name="apple-mobile-web-app-title" content="SINAPSIS">
+<link rel="apple-touch-icon" href="apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
 <link href="https://fonts.googleapis.com/css2?family=Unbounded:wght@400;600;800;900&family=Sora:wght@400;500;600;700&family=JetBrains+Mono:wght@500;700&display=swap" rel="stylesheet">
@@ -73,6 +83,7 @@
   .daycard .mdesc{color:var(--muted);font-size:14px;line-height:1.4;margin:8px auto 0;max-width:30ch}
   @keyframes float{0%,100%{transform:translateY(0)}50%{transform:translateY(-6px)}}
   .home-cta{margin-top:18px;display:flex;flex-direction:column;gap:10px}
+  .home-streak{margin-top:13px;text-align:center;font-family:'JetBrains Mono';font-weight:700;font-size:12.5px;color:var(--c-rotacion);letter-spacing:.02em}
   .home-foot{margin-top:auto;padding-top:18px;display:flex;align-items:center;justify-content:center;gap:9px;color:var(--muted);font-family:'JetBrains Mono';font-size:12px;text-align:center}
   .home-foot .em{font-size:18px}
 
@@ -185,6 +196,14 @@
   .claim-msg{font-size:11px;color:#FF5468;margin-top:6px;min-height:13px}
   .netline{text-align:center;font-family:'JetBrains Mono';font-size:10px;color:var(--faint);padding-top:8px}
   .netline.on{color:var(--c-fisica)}
+  .ios-hint{position:fixed;left:50%;bottom:16px;transform:translateX(-50%);z-index:30;max-width:420px;width:calc(100% - 28px);
+    background:rgba(22,20,47,.97);border:1px solid var(--c-figuras);border-radius:16px;padding:13px 14px;
+    display:flex;align-items:center;gap:11px;box-shadow:0 18px 50px -18px #000,0 0 26px -12px var(--c-figuras);
+    animation:scrIn .4s cubic-bezier(.2,.8,.3,1) both}
+  .ios-hint .ico{font-size:22px;flex:0 0 auto}
+  .ios-hint .tx{font-size:12px;color:var(--ink);line-height:1.4;flex:1}
+  .ios-hint .tx b{color:var(--c-figuras)}
+  .ios-hint .x{flex:0 0 auto;width:26px;height:26px;border-radius:8px;border:1px solid var(--line);background:var(--panel-2);color:var(--muted);font-size:14px;cursor:pointer}
   .ladder{display:flex;flex-direction:column;gap:9px}
   .rung{display:flex;align-items:center;gap:14px;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 15px;position:relative;overflow:hidden}
   .rung .bar{position:absolute;left:0;top:0;bottom:0;width:0;opacity:.16}
@@ -225,6 +244,7 @@
         <div class="mname" id="homeName">Normal</div>
         <div class="mdesc" id="homeDesc">Sin giro. Puro survival.</div>
       </div>
+      <div class="home-streak" id="homeStreak" style="display:none"></div>
       <div class="home-cta">
         <button class="btn-big" id="playBtn" onclick="startGame()">JUGAR ▸</button>
       </div>
@@ -316,6 +336,12 @@
   </nav>
 </div>
 
+<div class="ios-hint" id="iosHint" style="display:none">
+  <span class="ico">📲</span>
+  <span class="tx" id="iosHintTx"></span>
+  <button class="x" onclick="dismissIosHint()" aria-label="Cerrar">✕</button>
+</div>
+
 <script>
 /* ===== NEURAL BACKGROUND (Neón, estático) ===== */
 const NEURAL_COLS=['#22D3EE','#FF4D8D','#A78BFA','#FFB627'], NEURAL_WASH='rgba(34,211,238,.05)';
@@ -384,6 +410,8 @@ const STR={
     board_loading:'Cargando ranking…', board_empty:'Nadie ha jugado hoy todavía. Sé el primero.',
     board_live:'ranking en vivo', anon_name:'jugador',
     net_on:'en línea', net_off:'modo local · sin conexión', net_cfg:'backend sin configurar',
+    racha_dias:'días seguidos', no_pierdas:'no la pierdas', racha_pill:'racha', compartir:'Compartir resultado',
+    copiado:'¡Copiado! Pégalo donde quieras 📋', copia_manual:'Copia tu resultado:',
   },
   en:{
     diario:'Daily challenge', infinito:'Endless', jugar:'PLAY ▸',
@@ -414,6 +442,8 @@ const STR={
     board_loading:'Loading ranking…', board_empty:'No one has played today yet. Be the first.',
     board_live:'live ranking', anon_name:'player',
     net_on:'online', net_off:'local mode · offline', net_cfg:'backend not configured',
+    racha_dias:'day streak', no_pierdas:"don't lose it", racha_pill:'streak', compartir:'Share result',
+    copiado:'Copied! Paste it anywhere 📋', copia_manual:'Copy your result:',
   }
 };
 function t(k){ return (STR[lang]&&STR[lang][k]!=null)?STR[lang][k]:(STR.es[k]||k); }
@@ -617,12 +647,25 @@ let curQ=null, qid=0, mode='diario', dayMod='normal', testMod='auto', lastBest=0
 const SUPABASE_URL='https://nvwxvxfixcplqktbleqs.supabase.co';   // ← ej: https://xxxx.supabase.co
 const SUPABASE_KEY='sb_publishable_x3LTDjpk95l1IlOb0QNwwg_bdvhPdMu';   // ← anon / publishable key
 let sb=null, me=null, myProfile=null, dailyDone=false, myDailyScore=null;
-let inf={best_score:0,total_xp:0,level:1,games_played:0};
+let inf={best_score:0,total_xp:0,level:1,games_played:0,daily_streak:0,best_streak:0,last_daily_date:null};
 const NET={on:false,reason:'init'};
 let lastBoardRows=null;
 
 function todayISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
+function ymdISO(d){const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
+function yesterdayISO(){const d=new Date();d.setDate(d.getDate()-1);return ymdISO(d);}
 function levelFromXP(xp){let l=1;while(xp>=50*l*(l+1))l++;return l;}
+/* Actualiza la racha de días al cerrar un diario REAL. Devuelve la racha resultante.
+   ayer→+1 · hoy ya contado→igual · hueco→reinicia a 1. Solo sube best_streak. */
+function bumpStreak(){
+  const today=todayISO(), last=inf.last_daily_date;
+  if(last===today){ /* ya contaba hoy */ }
+  else if(last===yesterdayISO()){ inf.daily_streak=(inf.daily_streak||0)+1; }
+  else{ inf.daily_streak=1; }
+  inf.last_daily_date=today;
+  if((inf.daily_streak||0)>(inf.best_streak||0)) inf.best_streak=inf.daily_streak;
+  return inf.daily_streak;
+}
 
 async function initBackend(){
   if(!window.supabase || SUPABASE_URL.indexOf('http')!==0){ NET.on=false; NET.reason='config'; updateNetUI(); return; }
@@ -658,6 +701,9 @@ async function submitDaily(){
     if(error){ if(String(error.code)==='23505'){ dailyDone=true; note.textContent=t('dup_guardado'); return; } throw error; }
     dailyDone=true; myDailyScore=S.score;
     note.textContent=t('guardado');
+    // persistir racha (ya calculada en endGame→bumpStreak). upsert no pisa XP/nivel: solo estas columnas.
+    sb.from('infinite_progress').upsert({player_id:me.id,daily_streak:inf.daily_streak,
+      best_streak:inf.best_streak,last_daily_date:inf.last_daily_date}).then(()=>{},()=>{});
     try{
       const {data}=await sb.rpc('daily_leaderboard',{d:todayISO(),lim:200});
       if(data){ lastBoardRows=data; const mine=data.find(r=>r.player_id===me.id);
@@ -752,6 +798,13 @@ function refreshHome(){
   document.querySelectorAll('.seg button').forEach(b=>b.classList.toggle('on',b.dataset.m===mode));
   const spent=(mode==='diario'&&dailyDone&&testMod==='auto');
   if(spent) el('homeDesc').textContent=t('ya_jugaste');
+  // racha viva: gancho de regreso (solo en modo diario, si la racha sigue vigente hoy o ayer)
+  const sLine=el('homeStreak');
+  if(sLine){
+    const st=inf.daily_streak||0, last=inf.last_daily_date, vigente=(last===todayISO()||last===yesterdayISO());
+    if(mode==='diario'&&st>0&&vigente){ sLine.style.display=''; sLine.textContent='🔥 '+st+' '+t('racha_dias')+(spent?'':' · '+t('no_pierdas')); }
+    else sLine.style.display='none';
+  }
   const pb=el('playBtn');
   if(spent){ pb.textContent=t('ver_ranking')+' ▸'; pb.onclick=()=>nav('scr-rank'); }
   else{ pb.textContent=t('jugar'); pb.onclick=startGame; }
@@ -892,19 +945,28 @@ function countUp(elm,target,dur){
 function endGame(){
   S.running=false; cancelAnimationFrame(S.raf); SFX.gameover(); buzz(60);
   const r=rankFor(S.score); lastBest=Math.max(lastBest,S.score);
+  const realDaily=(S.modeRun==='diario'&&testMod==='auto');
+  let streakNow=inf.daily_streak||0;
+  if(realDaily){ streakNow=bumpStreak(); }   // sube la racha una sola vez por día
   el('resEm').textContent=r.em;
   el('resTitle').textContent=rName(r);
   el('resScore').innerHTML='<span id="resNum">0</span> <span class="u">'+t('pts')+'</span>';
+  // tercer pill: racha de días en diario, modo en infinito/prueba
+  const thirdPill = realDaily
+    ? '<div class="stat-pill"><b>🔥 '+streakNow+'</b><span>'+t('racha_pill')+'</span></div>'
+    : '<div class="stat-pill"><b>'+S.modName+'</b><span>'+t('modo')+'</span></div>';
   el('resStats').innerHTML=
     '<div class="stat-pill"><b>'+S.correctCount+'</b><span>'+t('aciertos')+'</span></div>'+
     '<div class="stat-pill"><b>'+S.maxCombo+'</b><span>'+t('mejor_racha')+'</span></div>'+
-    '<div class="stat-pill"><b>'+S.modName+'</b><span>'+t('modo')+'</span></div>';
+    thirdPill;
   let acts='';
   if(S.modeRun==='diario'){
-    const real=(testMod==='auto');
+    const real=realDaily;
+    S.shareData = real ? {score:S.score,rank:r,streak:streakNow,correct:S.correctCount,mod:MODIFIERS[S.modKey]} : null;
     acts='<div class="res-note" id="saveNote">'+(real?t('guardando'):t('no_cuenta_test'))+'</div>'+
          (real?'<div class="res-note">'+t('bala_gastada')+'</div>':'')+
-         '<button class="btn-big" onclick="goInfinito()">'+t('seguir_inf')+'</button>'+
+         (real?'<button class="btn-big" onclick="shareResult()">'+t('compartir')+'</button>':'')+
+         '<button class="'+(real?'btn-ghost':'btn-big')+'" onclick="goInfinito()">'+t('seguir_inf')+'</button>'+
          '<button class="btn-ghost" onclick="nav(\'scr-rank\')">'+t('ver_ranking')+'</button>';
   }else{
     const prog=applyInfiniteProgress();
@@ -916,9 +978,50 @@ function endGame(){
   el('resActions').innerHTML=acts;
   showScreen('scr-result');
   countUp(el('resNum'), S.score, 950);
-  if(S.modeRun==='diario'&&testMod==='auto') submitDaily();
+  if(realDaily) submitDaily();
 }
 function goInfinito(){ mode='infinito'; testMod='auto'; el('modTest').value='auto'; startGame(); }
+
+/* ===== RESULTADO COMPARTIBLE (estilo Wordle, sin spoilers) ===== */
+function shareText(d){
+  // barra visual de rango: rellena los 12 escalones hasta el rango logrado
+  const idx=RANKS.indexOf(d.rank), filled=idx+1;
+  let bar=''; for(let i=0;i<RANKS.length;i++) bar+= i<filled?'🟪':'⬛';
+  const dt=new Date(), MS=lang==='es'?MS_ES:MS_EN;
+  const fecha=lang==='es'?(dt.getDate()+' '+MS[dt.getMonth()]):(MS[dt.getMonth()]+' '+dt.getDate());
+  const L=lang==='es'?{
+    t:'SINAPSIS · Reto diario',rango:'Rango',pts:'pts',aciertos:'aciertos',racha:'racha',dias:'días',reta:'¿Le ganas?'
+  }:{
+    t:'SINAPSIS · Daily challenge',rango:'Tier',pts:'pts',aciertos:'correct',racha:'streak',dias:'days',reta:'Can you beat it?'
+  };
+  return d.mod.em+' '+L.t+' · '+fecha+'\n'+
+         bar+'\n'+
+         d.rank.em+' '+L.rango+': '+rName(d.rank)+'\n'+
+         '⚡ '+d.score.toLocaleString(lang)+' '+L.pts+' · ✅ '+d.correct+' '+L.aciertos+'\n'+
+         '🔥 '+L.racha+': '+d.streak+' '+L.dias+'\n'+
+         L.reta+' '+SHARE_URL;
+}
+// Link que se comparte. Por defecto = el dominio donde corre el juego (auto),
+// así nunca hay que editarlo al cambiar de dominio. Para forzar otro destino
+// (p. ej. un link inteligente que rutea a Play Store/web según el dispositivo),
+// reemplaza la línea de abajo por: const SHARE_URL='https://tu-link.com';
+const SHARE_URL=(location && location.origin && location.origin.indexOf('http')===0) ? location.origin : 'https://sinapsis.app';
+async function shareResult(){
+  if(!S.shareData) return;
+  SFX.tap(); buzz(8);
+  const txt=shareText(S.shareData);
+  try{
+    if(navigator.share){ await navigator.share({title:'SINAPSIS',text:txt}); return; }
+  }catch(e){ if(e&&e.name==='AbortError') return; }
+  // fallback: copiar al portapapeles
+  try{
+    await navigator.clipboard.writeText(txt);
+    const note=el('saveNote'); if(note) note.textContent=t('copiado');
+  }catch(e){
+    // último recurso: prompt para copiar manual
+    try{ window.prompt(t('copia_manual'), txt); }catch(_){}
+  }
+}
 
 /* ===== STATIC SCREENS (named so applyLang puede reconstruir) ===== */
 function buildLadder(){
@@ -928,33 +1031,69 @@ function buildLadder(){
     return '<div class="rung'+top+'"><div class="bar" style="width:'+fill+'%;background:'+r.col+'"></div><div class="em">'+r.em+'</div><div class="name">'+rName(r)+'<small>'+r.sub[lang]+'</small></div><div class="pts" style="color:'+r.col+'">'+pts+'</div></div>';
   }).join('');
 }
+/* ===== BOTS DETERMINISTAS (rivales de práctica) =====
+   El board nunca se ve vacío al arrancar. Generados por la semilla del día,
+   así todos ven los mismos "rivales" hoy. Se mezclan con jugadores reales y
+   se ordenan juntos por score. Escalan un poco con tu mejor marca para que
+   se sientan retadores pero alcanzables. No tocan la BD: son solo visuales. */
+const BOT_NAMES=['la_kemmenys','jx_carrillo','dani2k','profe_anais','el_pana_luis','marye_','crackzx','rojo_88',
+  'sofi_p','tato99','kbuilder','la_nena','vzla_mind','neuronaz','elprofe_g','mr_combo','zuly__','andrx',
+  'kapo_ve','mente7','lalo_r','chama_x','dragon_l','pixel_v'];
+function makeBots(modKey,n,anchor){
+  const rng=mulberry32(hashStr('sinapsis|bots|'+todayISO()));
+  const mult=(MODIFIERS[modKey]&&MODIFIERS[modKey].scoreMult)||1;
+  const names=[...BOT_NAMES];
+  for(let i=names.length-1;i>0;i--){const j=Math.floor(rng()*(i+1));[names[i],names[j]]=[names[j],names[i]];}
+  const top=Math.max(9000, Math.round((6000+rng()*7000+anchor*0.55)*mult));
+  const bots=[];
+  for(let i=0;i<n;i++){
+    const frac=Math.pow(rng(),1.4);
+    const sc=Math.max(300, Math.round(top*(0.18+0.82*frac)));
+    const lvl=1+Math.floor(rng()*Math.min(40,6+sc/1500));
+    bots.push({nm:names[i%names.length],sc,lvl,bot:true});
+  }
+  return bots;
+}
 function buildBoard(rows){
   if(rows!==undefined) lastBoardRows=rows;
   const data=lastBoardRows, tag=el('demoTag');
-  let list, isDemo=false;
-  if(data&&data.length){
-    list=data.map(r=>({p:Number(r.rank),nm:r.username||(t('anon_name')+'_'+String(r.player_id).slice(0,4)),
-      sc:r.score,lvl:r.level,you:!!(me&&r.player_id===me.id)}));
-    if(tag){ tag.textContent='● '+t('board_live')+' · '+todayISO(); }
-  }else if(data&&data.length===0){
-    el('board').innerHTML='<div class="brow"><div class="pos">—</div><div class="who"><span class="nm">'+t('board_empty')+'</span></div><div class="sc"></div></div>';
-    if(tag) tag.textContent='● '+t('board_live')+' · '+todayISO();
-    return;
-  }else{
-    isDemo=true;
-    list=[
-      {p:1,nm:'la_kemmenys',sc:13420,m:'medal-1'},
-      {p:2,nm:'profe_anaís',sc:8150,m:'medal-2'},
-      {p:3,nm:'jx_carrillo',sc:6090,m:'medal-3'},
-      {p:4,nm:'dani_2k11',sc:4010},
-      {p:5,nm:(lang==='es'?'TÚ':'YOU'),sc:3240,you:true},
-      {p:6,nm:'el_pana_luis',sc:1180},
+  const modKey = (mode==='diario')?dayMod:'normal';
+  const anchor = Math.max(lastBest, myDailyScore||0, 3000);
+
+  if(!NET.on && data===null){
+    // sin backend configurado: board de ejemplo puro (modo local)
+    const demo=[
+      {p:1,nm:'la_kemmenys',sc:13420},{p:2,nm:'profe_anais',sc:8150},
+      {p:3,nm:'jx_carrillo',sc:6090},{p:4,nm:'dani2k',sc:4010},
+      {p:5,nm:(lang==='es'?'TÚ':'YOU'),sc:3240,you:true},{p:6,nm:'el_pana_luis',sc:1180},
     ];
+    renderBoardRows(demo,true);
     if(tag) tag.textContent=t('demo');
+    return;
   }
+
+  // online: mezclar jugadores reales + bots deterministas
+  let real=(data||[]).map(r=>({
+    nm:r.username||(t('anon_name')+'_'+String(r.player_id).slice(0,4)),
+    sc:r.score, lvl:r.level, you:!!(me&&r.player_id===me.id), real:true }));
+  const haveYou=real.some(r=>r.you);
+  if(!haveYou && dailyDone && myDailyScore!=null){
+    real.push({nm:(myProfile&&myProfile.username)||(lang==='es'?'TÚ':'YOU'),sc:myDailyScore,lvl:inf.level,you:true,real:true});
+  }
+  const need=Math.max(0, 8-real.length);
+  const bots=makeBots(modKey,need,anchor);
+  let all=real.concat(bots);
+  // evita choques exactos de score (para orden estable y sin empates feos)
+  const seen={}; all.forEach(r=>{ while(seen[r.sc]){r.sc-=1;} seen[r.sc]=1; });
+  all.sort((a,b)=>b.sc-a.sc);
+  all.forEach((r,i)=>r.p=i+1);
+  renderBoardRows(all,false);
+  if(tag) tag.textContent='● '+t('board_live')+' · '+todayISO();
+}
+function renderBoardRows(list,isDemo){
   let html='<div class="brow head"><div>#</div><div>'+t('col_jugador')+'</div><div>'+t('col_pts')+'</div></div>';
   html+=list.map(r=>{
-    const medal=r.m||(r.p===1?'medal-1':r.p===2?'medal-2':r.p===3?'medal-3':'');
+    const medal=r.p===1?'medal-1':r.p===2?'medal-2':r.p===3?'medal-3':'';
     const rk=rankFor(r.sc);
     const lvl=(!isDemo&&r.lvl)?' · '+t('lvl_abbr')+r.lvl:'';
     return '<div class="brow'+(r.you?' you':'')+'"><div class="pos '+medal+'">'+r.p+'</div>'+
@@ -976,9 +1115,28 @@ function initModTest(){
   sel.onchange=()=>{ testMod=sel.value; if(!S.running) refreshHome(); };
 }
 
+/* ===== AVISO "Agregar a inicio" (solo iPhone/iPad en Safari, no instalada) ===== */
+function dismissIosHint(){ const h=el('iosHint'); if(h) h.style.display='none'; try{sessionStorage.setItem('sx_ioshint','1');}catch(e){} SFX&&SFX.tap&&SFX.tap(); }
+function maybeShowIosHint(){
+  try{
+    const ua=navigator.userAgent||'';
+    const isIOS=/iPad|iPhone|iPod/.test(ua) || (navigator.platform==='MacIntel'&&navigator.maxTouchPoints>1);
+    const standalone=('standalone'in navigator&&navigator.standalone)||matchMedia('(display-mode: standalone)').matches;
+    let dismissed=false; try{dismissed=sessionStorage.getItem('sx_ioshint')==='1';}catch(e){}
+    if(isIOS && !standalone && !dismissed){
+      const h=el('iosHint'); if(!h)return;
+      el('iosHintTx').innerHTML = lang==='es'
+        ? 'Instala SINAPSIS: toca <b>Compartir</b> y luego <b>Agregar a inicio</b>.'
+        : 'Install SINAPSIS: tap <b>Share</b>, then <b>Add to Home Screen</b>.';
+      h.style.display='';
+    }
+  }catch(e){}
+}
+
 /* ===== INIT ===== */
 applyLang();
 initBackend();
+maybeShowIosHint();
 </script>
 </body>
 </html>
