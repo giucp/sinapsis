@@ -130,7 +130,7 @@
   .opts.grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
   .opts.grid3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
   .opts.sides{display:grid;grid-template-columns:1fr 1fr;gap:12px}
-  .opt{background:var(--panel-2);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-family:'JetBrains Mono';font-weight:700;font-size:22px;color:var(--ink);transition:border-color .12s,transform .2s cubic-bezier(.3,1.5,.5,1),background .12s;animation:optIn .24s cubic-bezier(.25,1.2,.4,1) both;animation-delay:calc(min(var(--i,0)*24ms,120ms))}
+  .opt{background:linear-gradient(168deg,#23204E 0%,#1C1943 55%,#171336 100%);border:1.5px solid var(--line);border-radius:16px;padding:14px;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px;flex-wrap:wrap;font-family:'JetBrains Mono';font-weight:700;font-size:22px;color:var(--ink);box-shadow:0 8px 18px -12px rgba(0,0,0,.7),inset 0 1px 0 rgba(255,255,255,.05);transition:border-color .12s,transform .2s cubic-bezier(.3,1.5,.5,1),background .12s;animation:optIn .24s cubic-bezier(.25,1.2,.4,1) both;animation-delay:calc(min(var(--i,0)*24ms,120ms))}
   @keyframes optIn{0%{opacity:0;transform:translateY(8px) scale(.96)}100%{opacity:1;transform:translateY(0) scale(1)}}
   .opt:active{transform:scale(.95)}
   .opt.cluster{min-height:108px}
@@ -139,7 +139,7 @@
   .opt.no{border-color:#FF5468;background:rgba(255,84,104,.16)}
   .opt.dead{opacity:0;pointer-events:none;animation:none;transition:opacity .28s ease}
   .shape{width:42px;height:42px;display:grid;place-items:center;position:relative}
-  .shape svg{position:absolute;inset:0;width:100%;height:100%}
+  .shape svg{position:absolute;inset:0;width:100%;height:100%;filter:drop-shadow(0 2px 4px rgba(0,0,0,.45))}
   .shape span{position:relative;font-family:'JetBrains Mono';font-weight:700;font-size:15px;color:#0A0A1E}
   .stage-flash{animation:surge .5s ease}
   @keyframes surge{0%{box-shadow:0 0 0 0 rgba(255,182,39,.5) inset}100%{box-shadow:0 0 0 50px rgba(255,182,39,0) inset}}
@@ -396,11 +396,42 @@ const NEURAL_COLS=['#22D3EE','#FF4D8D','#A78BFA','#FFB627'], NEURAL_WASH='rgba(3
    cookie (1 año) sobrevive eso. Se escribe en los tres; se lee del primero
    que tenga valor. */
 const MEM={};
+function cookEsc(k){ return k.replace(/[.*+?^${}()|[\]\\]/g,'\\$&'); }
+function cookieRaw(k){
+  try{ const m=document.cookie.match('(?:^|; )'+cookEsc(k)+'=([^;]*)'); return m?m[1]:null; }catch(e){ return null; }
+}
+function cookiePut(k,v,age){ try{ document.cookie=k+'='+v+';path=/;max-age='+age+';SameSite=Lax'; }catch(e){} }
+/* valores grandes (p. ej. la sesión de Supabase, >4KB) no caben en una
+   cookie: se trocean en k.c0..k.cN + k.n. Los chicos van en una sola. */
+const MAXC=3400;
 function cookieGet(k){
-  try{ const m=document.cookie.match('(?:^|; )'+k+'=([^;]*)'); return m?decodeURIComponent(m[1]):null; }catch(e){ return null; }
+  const v=cookieRaw(k);
+  if(v!=null&&v!==''){ try{ return decodeURIComponent(v); }catch(e){ return null; } }
+  const n=parseInt(cookieRaw(k+'.n')||'0',10);
+  if(n>0){
+    let s='';
+    for(let i=0;i<n;i++){ const c=cookieRaw(k+'.c'+i); if(c==null) return null; s+=c; }
+    try{ return decodeURIComponent(s); }catch(e){ return null; }
+  }
+  return null;
 }
 function cookieSet(k,v){
-  try{ document.cookie=k+'='+encodeURIComponent(v)+';path=/;max-age=31536000;SameSite=Lax'; }catch(e){}
+  const enc=encodeURIComponent(v), oldN=parseInt(cookieRaw(k+'.n')||'0',10);
+  if(enc.length<=MAXC){
+    cookiePut(k,enc,31536000);
+    if(oldN>0){ cookiePut(k+'.n','',0); for(let i=0;i<oldN;i++) cookiePut(k+'.c'+i,'',0); }
+    return;
+  }
+  const n=Math.ceil(enc.length/MAXC);
+  for(let i=0;i<n;i++) cookiePut(k+'.c'+i,enc.slice(i*MAXC,(i+1)*MAXC),31536000);
+  cookiePut(k+'.n',String(n),31536000);
+  for(let i=n;i<oldN;i++) cookiePut(k+'.c'+i,'',0);
+  cookiePut(k,'',0);
+}
+function cookieDel(k){
+  const n=parseInt(cookieRaw(k+'.n')||'0',10);
+  cookiePut(k,'',0);
+  if(n>0){ cookiePut(k+'.n','',0); for(let i=0;i<n;i++) cookiePut(k+'.c'+i,'',0); }
 }
 const store={
   get(k){
@@ -412,6 +443,11 @@ const store={
     MEM[k]=v;
     try{ localStorage.setItem(k,v); }catch(e){}
     cookieSet(k,v);
+  },
+  del(k){
+    delete MEM[k];
+    try{ localStorage.removeItem(k); }catch(e){}
+    cookieDel(k);
   }
 };
 let lang=store.get('sx_lang') || ((navigator.language||'es').toLowerCase().startsWith('en')?'en':'es');
@@ -511,13 +547,35 @@ const MS_ES=['ene','feb','mar','abr','may','jun','jul','ago','sep','oct','nov','
 const MS_EN=['Jan','Feb','Mar','Apr','May','Jun','Jul','Aug','Sep','Oct','Nov','Dec'];
 const MEMO_WORDS={es:['la <b>primera</b>','la <b>del medio</b>','la <b>última</b>'],en:['the <b>first</b>','the <b>middle</b>','the <b>last</b>']};
 
-/* ===== SHAPES ===== */
+/* ===== SHAPES =====
+   Relieve generativo: gradiente diagonal (claro→base→oscuro) + borde más
+   oscuro + brillo especular. Funciona con cualquier color hex, así que
+   intruso-por-color y patrón salen vestidos igual sin código extra. */
+function shade(hex,p){
+  const n=parseInt(hex.slice(1),16), r=n>>16&255, g=n>>8&255, b=n&255,
+        f=c=>Math.max(0,Math.min(255,Math.round(p>0?c+(255-c)*p/100:c+c*p/100)));
+  return '#'+((1<<24)+(f(r)<<16)+(f(g)<<8)+f(b)).toString(16).slice(1);
+}
+function sgrad(color){
+  const id='sg'+color.slice(1);
+  return {id,def:'<defs><linearGradient id="'+id+'" x1="0" y1="0" x2="1" y2="1">'+
+    '<stop offset="0" stop-color="'+shade(color,42)+'"/>'+
+    '<stop offset=".55" stop-color="'+color+'"/>'+
+    '<stop offset="1" stop-color="'+shade(color,-28)+'"/></linearGradient></defs>'};
+}
+function glossy(color,body,hx,hy,hr){
+  const g=sgrad(color);
+  return '<svg viewBox="0 0 40 40">'+g.def+
+    body.split('__F__').join('url(#'+g.id+')').split('__S__').join(shade(color,-34))+
+    '<ellipse cx="'+hx+'" cy="'+hy+'" rx="'+hr+'" ry="'+(hr*0.62).toFixed(1)+'" fill="rgba(255,255,255,.4)" transform="rotate(-28 '+hx+' '+hy+')"/></svg>';
+}
+const SK=' fill="__F__" stroke="__S__" stroke-width="1.4" stroke-linejoin="round"';
 function shapeSVG(kind,color){
-  if(kind==='tri') return '<svg viewBox="0 0 40 40"><polygon points="20,4 37,36 3,36" fill="'+color+'"/></svg>';
-  if(kind==='sq')  return '<svg viewBox="0 0 40 40"><rect x="6" y="6" width="28" height="28" rx="5" fill="'+color+'"/></svg>';
-  if(kind==='cir') return '<svg viewBox="0 0 40 40"><circle cx="20" cy="20" r="16" fill="'+color+'"/></svg>';
-  if(kind==='dia') return '<svg viewBox="0 0 40 40"><polygon points="20,3 37,20 20,37 3,20" fill="'+color+'"/></svg>';
-  return '<svg viewBox="0 0 40 40"><polygon points="20,3 25,15 38,15 27,23 31,37 20,29 9,37 13,23 2,15 15,15" fill="'+color+'"/></svg>';
+  if(kind==='tri') return glossy(color,'<polygon points="20,5 36,35 4,35"'+SK+'/>',18,22,4.4);
+  if(kind==='sq')  return glossy(color,'<rect x="6" y="6" width="28" height="28" rx="6"'+SK+'/>',14,13.5,5);
+  if(kind==='cir') return glossy(color,'<circle cx="20" cy="20" r="15.5"'+SK+'/>',14,13,5.2);
+  if(kind==='dia') return glossy(color,'<polygon points="20,4 36,20 20,36 4,20"'+SK+'/>',16.5,16,3.8);
+  return glossy(color,'<polygon points="20,3 25,15 38,15 27,23 31,37 20,29 9,37 13,23 2,15 15,15"'+SK+'/>',18,15.5,2.8);
 }
 const SHAPES=['tri','sq','cir','dia','star'];
 const SCOLORS={tri:'#22D3EE',sq:'#FFB627',cir:'#FF4D8D',dia:'#5BE49B',star:'#A78BFA'};
@@ -595,8 +653,13 @@ function genMemoria(diff){
     options:optKinds.map(k=>({html:shapePlain(k),correct:k===kinds[askPos],cls:'tile'}))};
 }
 function polyPts(n,cx,cy,r,rot){let p=[];for(let i=0;i<n;i++){const a=rot+i*2*Math.PI/n-Math.PI/2;p.push((cx+r*Math.cos(a)).toFixed(1)+','+(cy+r*Math.sin(a)).toFixed(1));}return p.join(' ');}
-function polyShape(n,color){return '<div class="shape"><svg viewBox="0 0 40 40"><polygon points="'+polyPts(n,20,20,16,0)+'" fill="'+color+'"/></svg></div>';}
-function arrowShape(deg,color){return '<div class="shape"><svg viewBox="0 0 40 40"><g transform="rotate('+deg+' 20 20)"><polygon points="6,14 24,14 24,8 34,20 24,32 24,26 6,26" fill="'+color+'"/></g></svg></div>';}
+function polyShape(n,color){return '<div class="shape">'+glossy(color,'<polygon points="'+polyPts(n,20,20,15.5,0)+'"'+SK+'/>',19,17,3)+'</div>';}
+function arrowShape(deg,color){
+  const g=sgrad(color);
+  return '<div class="shape"><svg viewBox="0 0 40 40">'+g.def+'<g transform="rotate('+deg+' 20 20)">'+
+    '<polygon points="6,14 24,14 24,8 34,20 24,32 24,26 6,26" fill="url(#'+g.id+')" stroke="'+shade(color,-34)+'" stroke-width="1.4" stroke-linejoin="round"/>'+
+    '<ellipse cx="12" cy="17.5" rx="3.4" ry="2" fill="rgba(255,255,255,.4)" transform="rotate(-28 12 17.5)"/></g></svg></div>';
+}
 function genPatron(diff){
   const PC='#FF6B3D', color=COL.patron, sep='<span style="color:var(--faint)">·</span>', q='<span class="q" style="font-size:25px">?</span>';
   if(pick(['rot','rot','lados'])==='rot'){
@@ -715,8 +778,9 @@ function todayISO(){const d=new Date(),p=n=>String(n).padStart(2,'0');return d.g
 function ymdISO(d){const p=n=>String(n).padStart(2,'0');return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate());}
 function yesterdayISO(){const d=new Date();d.setDate(d.getDate()-1);return ymdISO(d);}
 function levelFromXP(xp){let l=1;while(xp>=50*l*(l+1))l++;return l;}
-/* Actualiza la racha de días al cerrar un diario REAL. Devuelve la racha resultante.
-   ayer→+1 · hoy ya contado→igual · hueco→reinicia a 1. Solo sube best_streak. */
+/* Racha de días — SOLO UI local: replica el cálculo del servidor para mostrar
+   el número al instante en el resultado. La fuente de verdad es el trigger
+   v1.3 (se dispara con el insert en daily_scores). No escribir esto a la BD. */
 function bumpStreak(){
   const today=todayISO(), last=inf.last_daily_date;
   if(last===today){ /* ya contaba hoy */ }
@@ -730,7 +794,14 @@ function bumpStreak(){
 async function initBackend(){
   if(!window.supabase || SUPABASE_URL.indexOf('http')!==0){ NET.on=false; NET.reason='config'; updateNetUI(); return; }
   try{
-    sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY);
+    /* CLAVE Android: supabase-js guarda su sesión en localStorage, y algunas
+       PWA de Android lo limpian entre sesiones → usuario anónimo NUEVO cada
+       vez (racha siempre 1, nombre perdido). Le damos nuestro storage con
+       respaldo en cookie troceada para que la sesión sobreviva. */
+    sb=window.supabase.createClient(SUPABASE_URL,SUPABASE_KEY,{auth:{
+      persistSession:true, autoRefreshToken:true,
+      storage:{ getItem:k=>store.get(k), setItem:(k,v)=>store.set(k,v), removeItem:k=>store.del(k) }
+    }});
     let s=(await sb.auth.getSession()).data.session;
     if(!s){ const r=await sb.auth.signInAnonymously(); if(r.error) throw r.error; s=r.data.session; }
     me=s.user; NET.on=true; NET.reason='';
@@ -761,9 +832,9 @@ async function submitDaily(){
     if(error){ if(String(error.code)==='23505'){ dailyDone=true; note.textContent=t('dup_guardado'); return; } throw error; }
     dailyDone=true; myDailyScore=S.score;
     note.textContent=t('guardado');
-    // persistir racha (ya calculada en endGame→bumpStreak). upsert no pisa XP/nivel: solo estas columnas.
-    sb.from('infinite_progress').upsert({player_id:me.id,daily_streak:inf.daily_streak,
-      best_streak:inf.best_streak,last_daily_date:inf.last_daily_date}).then(()=>{},()=>{});
+    // La racha la calcula y guarda el SERVIDOR (trigger v1.3 sobre daily_scores):
+    // atómico con el insert del score, inmune a cierres de app y a HTML viejo.
+    // bumpStreak() solo actualiza la UI local al instante; no escribe a la BD.
     try{
       const {data}=await sb.rpc('daily_leaderboard',{d:todayISO(),lim:200});
       if(data){ lastBoardRows=data; const mine=data.find(r=>r.player_id===me.id);
@@ -781,7 +852,7 @@ function applyInfiniteProgress(){
   inf.games_played=(inf.games_played||0)+1;
   if(NET.on&&me){
     sb.from('infinite_progress').upsert({player_id:me.id,best_score:inf.best_score,total_xp:inf.total_xp,
-      level:inf.level,games_played:inf.games_played,last_played_at:new Date().toISOString()}).then(()=>{},()=>{});
+      level:inf.level,games_played:inf.games_played,last_played_at:new Date().toISOString()}).then(()=>{},e=>console.warn('progreso upsert',e));
   }
   return {gained,record};
 }
@@ -1081,11 +1152,67 @@ function shareText(d){
 // (p. ej. un link inteligente que rutea a Play Store/web según el dispositivo),
 // reemplaza la línea de abajo por: const SHARE_URL='https://tu-link.com';
 const SHARE_URL=(location && location.origin && location.origin.indexOf('http')===0) ? location.origin : 'https://sinapsis.app';
+/* Tarjeta de resultado (1080×1080) dibujada en canvas: misma estética del
+   juego (fondo neural, rango, score, barra de 12 rangos). Se comparte como
+   imagen junto al texto donde el sistema lo soporte. */
+function rrect(c,x,y,w,h,r){
+  c.beginPath();c.moveTo(x+r,y);c.arcTo(x+w,y,x+w,y+h,r);c.arcTo(x+w,y+h,x,y+h,r);
+  c.arcTo(x,y+h,x,y,r);c.arcTo(x,y,x+w,y,r);c.closePath();
+}
+async function makeShareCard(d){
+  try{ if(document.fonts&&document.fonts.ready) await document.fonts.ready; }catch(e){}
+  const W=1080,H=1080,cv=document.createElement('canvas');cv.width=W;cv.height=H;
+  const c=cv.getContext('2d'); if(!c) return null;
+  c.fillStyle='#0A0A1E'; c.fillRect(0,0,W,H);
+  // red neuronal sutil, determinista por fecha (la tarjeta de hoy es una sola)
+  const rg=mulberry32(hashStr('sinapsis|card|'+todayISO())), pts=[];
+  for(let i=0;i<26;i++) pts.push({x:rg()*W,y:rg()*H});
+  c.lineWidth=2;
+  for(let i=0;i<pts.length;i++)for(let j=i+1;j<pts.length;j++){
+    const a=pts[i],b=pts[j],dd=Math.hypot(a.x-b.x,a.y-b.y);
+    if(dd<260){ c.strokeStyle='rgba(120,110,200,'+((1-dd/260)*0.16).toFixed(3)+')';
+      c.beginPath();c.moveTo(a.x,a.y);c.lineTo(b.x,b.y);c.stroke(); }
+  }
+  const dotCols=['#22D3EE','#FF4D8D','#A78BFA','#FFB627'];
+  pts.forEach((p,i)=>{c.fillStyle=dotCols[i%4];c.globalAlpha=.5;c.beginPath();c.arc(p.x,p.y,4,0,7);c.fill();c.globalAlpha=1;});
+  const glow=c.createRadialGradient(W/2,430,0,W/2,430,360);
+  glow.addColorStop(0,'rgba(255,182,39,.18)'); glow.addColorStop(1,'rgba(255,182,39,0)');
+  c.fillStyle=glow; c.fillRect(0,0,W,H);
+  c.textAlign='center';
+  c.fillStyle='#F4F1FF'; c.font='800 56px Unbounded, sans-serif'; c.fillText('SINAPSIS',W/2,118);
+  const dt=new Date(), MS=lang==='es'?MS_ES:MS_EN;
+  const fecha=lang==='es'?(dt.getDate()+' '+MS[dt.getMonth()]):(MS[dt.getMonth()]+' '+dt.getDate());
+  c.fillStyle='#9D98C7'; c.font='500 34px "JetBrains Mono", monospace';
+  c.fillText((lang==='es'?'Reto diario · ':'Daily challenge · ')+fecha+' · '+d.mod.em+' '+mName(d.mod),W/2,176);
+  c.font='230px Sora, sans-serif'; c.fillText(d.rank.em,W/2,510);
+  c.fillStyle=d.rank.col; c.font='800 66px Unbounded, sans-serif'; c.fillText(rName(d.rank),W/2,620);
+  const sg2=c.createLinearGradient(W/2-220,0,W/2+220,0);
+  sg2.addColorStop(0,'#FFB627'); sg2.addColorStop(1,'#FF6B3D');
+  c.fillStyle=sg2; c.font='700 110px "JetBrains Mono", monospace';
+  c.fillText(d.score.toLocaleString(lang),W/2,748);
+  c.fillStyle='#6B679A'; c.font='500 34px "JetBrains Mono", monospace';
+  c.fillText(lang==='es'?'puntos':'points',W/2,798);
+  const idx=RANKS.indexOf(d.rank), bw=58, gap=14, total=12*bw+11*gap, x0=(W-total)/2, y0=856;
+  for(let i=0;i<12;i++){ c.fillStyle=i<=idx?RANKS[i].col:'#241F4A'; rrect(c,x0+i*(bw+gap),y0,bw,26,8); c.fill(); }
+  c.fillStyle='#9D98C7'; c.font='500 36px "JetBrains Mono", monospace';
+  c.fillText('✅ '+d.correct+' '+(lang==='es'?'aciertos':'correct')+'   🔥 '+d.streak+' '+(lang==='es'?'días':'days'),W/2,952);
+  c.fillStyle='#22D3EE'; c.font='600 34px Sora, sans-serif';
+  c.fillText((lang==='es'?'¿Le ganas? ':'Can you beat it? ')+SHARE_URL.replace(/^https?:\/\//,''),W/2,1020);
+  return await new Promise(res=>cv.toBlob(res,'image/png'));
+}
 async function shareResult(){
   if(!S.shareData) return;
   SFX.tap(); buzz(8);
   const txt=shareText(S.shareData);
+  let file=null;
   try{
+    const blob=await makeShareCard(S.shareData);
+    if(blob) file=new File([blob],'sinapsis-'+todayISO()+'.png',{type:'image/png'});
+  }catch(e){ file=null; }
+  try{
+    if(file && navigator.canShare && navigator.canShare({files:[file]})){
+      await navigator.share({files:[file],title:'SINAPSIS',text:txt}); return;
+    }
     if(navigator.share){ await navigator.share({title:'SINAPSIS',text:txt}); return; }
   }catch(e){ if(e&&e.name==='AbortError') return; }
   // fallback: copiar al portapapeles
@@ -1239,4 +1366,3 @@ try{ navigator.storage&&navigator.storage.persist&&navigator.storage.persist(); 
 </script>
 </body>
 </html>
-
